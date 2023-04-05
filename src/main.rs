@@ -11,7 +11,6 @@ struct MapEntry<V> {
     index: usize,
 }
 
-// change
 pub struct ClockMap<K: Clone, V> {
     value_map: HashMap<K, MapEntry<V>>,
     clock_list: Vec<Option<Entry<K>>>,
