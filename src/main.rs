@@ -62,17 +62,16 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                 };
                 self.value_map.insert(key, new_map_entry);
             }
-            println!(
-                "hit, pointer: {}, map_len: {}",
-                self.pointer,
-                self.value_map.len()
-            );
+            // println!(
+            //     "hit, pointer: {}, map_len: {}",
+            //     self.pointer,
+            //     self.value_map.len()
+            // );
             return;
         } else {
             for i in self.pointer..self.pointer + self.capacity {
                 match &mut self.clock_list[i % self.capacity] {
                     None => {
-                        print!("none: ");
                         let new_entry = Entry {
                             second_chance: false,
                             key: key.clone(),
@@ -85,7 +84,6 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                         self.value_map.insert(key, new_map_entry);
                     }
                     Some(Entry { second_chance, .. }) => {
-                        print!("not none: ");
                         if *second_chance {
                             *second_chance = false;
                             continue;
@@ -105,48 +103,45 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                 }
                 self.pointer = (i + 1) % self.capacity;
                 self.miss += 1;
-                println!(
-                    "miss, pointer: {}, map_len: {}",
-                    self.pointer,
-                    self.value_map.len()
-                );
+                // println!(
+                //     "miss, pointer: {}, map_len: {}",
+                //     self.pointer,
+                //     self.value_map.len()
+                // );
                 break;
             }
         }
     }
 }
 
-fn main() {
-    let mut clockmap1 = ClockMap::new(3);
-    let input_keys1 = vec![0, 4, 1, 4, 2, 4, 3, 4, 2, 4, 0, 4, 1, 4, 2, 4, 3, 4];
-    let input_vals1 = vec![0, 4, 1, 4, 2, 4, 3, 4, 2, 4, 0, 4, 1, 4, 2, 4, 3, 4];
+#[cfg(test)]
+mod tests {
+    use crate::ClockMap;
+    #[test]
+    fn test_1() {
+        let mut clockmap1 = ClockMap::new(3);
+        let input_keys1 = vec![0, 4, 1, 4, 2, 4, 3, 4, 2, 4, 0, 4, 1, 4, 2, 4, 3, 4];
+        let input_vals1 = vec![0, 4, 1, 4, 2, 4, 3, 4, 2, 4, 0, 4, 1, 4, 2, 4, 3, 4];
 
-    for i in 0..input_keys1.len() {
-        clockmap1.insert(input_keys1[i], input_vals1[i]);
-    }
-    println!(
-        "misses: {}, length: {}",
-        clockmap1.miss,
-        clockmap1.clock_list.len()
-    );
-    for i in 0..clockmap1.clock_list.len() {
-        print!("{:#?},", clockmap1.clock_list[i].as_ref().unwrap().key);
-    }
-    println!();
+        for i in 0..input_keys1.len() {
+            clockmap1.insert(input_keys1[i], input_vals1[i]);
+        }
 
-    let mut clockmap2 = ClockMap::new(4);
-    let input_keys2 = vec![2, 5, 10, 1, 2, 2, 6, 9, 1, 2, 10, 2, 6, 1, 2, 1, 6, 9, 5, 1];
-    let input_vals2 = vec![2, 5, 10, 1, 2, 2, 6, 9, 1, 2, 10, 2, 6, 1, 2, 1, 6, 9, 5, 1];
-    for i in 0..input_keys2.len() {
-        clockmap2.insert(input_keys2[i], input_vals2[i]);
+        assert_eq!(clockmap1.miss, 9);
     }
-    println!(
-        "misses: {}, length: {}",
-        clockmap2.miss,
-        clockmap2.clock_list.len()
-    );
-    for i in 0..clockmap2.clock_list.len() {
-        print!("{:#?},", clockmap2.clock_list[i].as_ref().unwrap().key);
+
+    #[test]
+    fn test_2() {
+        let mut clockmap2 = ClockMap::new(4);
+        let input_keys2 = vec![2, 5, 10, 1, 2, 2, 6, 9, 1, 2, 10, 2, 6, 1, 2, 1, 6, 9, 5, 1];
+        let input_vals2 = vec![2, 5, 10, 1, 2, 2, 6, 9, 1, 2, 10, 2, 6, 1, 2, 1, 6, 9, 5, 1];
+
+        for i in 0..input_keys2.len() {
+            clockmap2.insert(input_keys2[i], input_vals2[i]);
+        }
+
+        assert_eq!(clockmap2.miss, 11)
     }
-    println!();
 }
+
+fn main() {}
