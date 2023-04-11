@@ -1,9 +1,8 @@
 use std::{
     collections::HashMap,
-    process::id,
     sync::{Arc, Mutex},
+    thread,
 };
-extern crate num_cpus;
 
 #[derive(Clone)]
 struct Entry<K: Clone> {
@@ -33,7 +32,7 @@ pub struct ClockMap<K: Clone, V> {
 
 impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockDashMap<K, V> {
     fn new(cap: usize) -> Self {
-        let num_shards = num_cpus::get();
+        let num_shards = thread::available_parallelism().unwrap().get();
         let mut shards = Vec::default();
         for i in 0..num_shards {
             let mut this_cap = (cap - cap % num_shards) / num_shards;
