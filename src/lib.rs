@@ -55,11 +55,11 @@ impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockDashMap<K, V> {
         self.shards[shard_idx].lock().unwrap()
     }
 
-    pub fn insert(&mut self, key: K, val: V) {
+    pub fn insert(&self, key: K, val: V) {
         self.get_shard(&key).insert(key, val);
     }
 
-    pub fn read(&mut self, key: &K) -> Option<V> {
+    pub fn read(&self, key: &K) -> Option<V> {
         self.get_shard(key).read(key)
     }
 }
