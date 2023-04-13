@@ -55,13 +55,13 @@ impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockDashMap<K, V> {
             let shard = &mut self.shards[shard_idx].lock().unwrap();
             (*shard).insert(key.clone(), val);
         } else {
-            let shard_idx = self.next_modify.lock().unwrap();
             let mut next_modify = self.next_modify.lock().unwrap();
-            *next_modify = (*next_modify + 1) % self.num_shards;
             let mut key_shard = self.key_shard.lock().unwrap();
-            (*key_shard).insert(key.clone(), *shard_idx);
-            let shard = &mut self.shards[*shard_idx].lock().unwrap();
-            (*shard).insert(key, val);
+            let shard = &mut self.shards[*next_modify].lock().unwrap();
+            (*shard).insert(key.clone(), val);
+            *next_modify = (*next_modify + 1) % self.num_shards;
+            (*key_shard).insert(key, *next_modify);
+
         }
     }
     fn read(&mut self, key: &K) -> Option<V> {
@@ -196,6 +196,10 @@ mod tests {
         }
 
         assert_eq!(clockmap2.miss, 11)
+    }
+    #[test]
+    fn test_multiple_thread() {
+
     }
 }
 
