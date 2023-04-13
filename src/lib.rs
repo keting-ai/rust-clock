@@ -181,5 +181,3 @@ mod tests {
     #[test]
     fn test_multiple_thread() {}
 }
-
-fn main() {}
