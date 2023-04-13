@@ -15,12 +15,12 @@ struct Entry<K: Clone> {
 
 struct MapEntry<V> {
     value: V,
+    /// Position within the clock array
     index: usize,
 }
 
 pub struct ClockDashMap<K: Clone, V> {
     shards: Vec<Arc<Mutex<ClockMap<K, V>>>>,
-    next_modify: Arc<Mutex<usize>>,
 }
 
 pub struct ClockMap<K: Clone, V> {
@@ -44,12 +44,11 @@ impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockDashMap<K, V> {
         }
         ClockDashMap {
             shards,
-            next_modify: Arc::new(Mutex::new(0)),
         }
     }
 
     #[inline(always)]
-    fn get_shard<'a>(&'a self, key: &K) -> MutexGuard<'a,ClockMap<K, V>> {
+    fn get_shard<'a>(&'a self, key: &K) -> MutexGuard<'a, ClockMap<K, V>> {
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
         let shard_idx = (hasher.finish() as usize) % self.shards.len();
@@ -61,11 +60,11 @@ impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockDashMap<K, V> {
     }
 
     pub fn read(&mut self, key: &K) -> Option<V> {
-        self.get_shard(&key).read(key)
+        self.get_shard(key).read(key)
     }
 }
 
-impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
+impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
     pub fn new(cap: usize) -> Self {
         ClockMap {
             value_map: HashMap::default(),
@@ -77,20 +76,20 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
     }
 
     pub fn read(&mut self, key: &K) -> Option<V> {
-        if self.value_map.contains_key(key) {
-            let idx = self.value_map.get(&key).unwrap().index;
+        if let Some(ventry) = self.value_map.get(key) {
             if let Some(Entry {
                 key: entry_key,
                 second_chance,
-            }) = &mut self.clock_list[idx]
+            }) = &mut self.clock_list[ventry.index]
             {
                 if key == entry_key {
                     *second_chance = true;
-                    return Some(self.value_map.get(&entry_key).unwrap().value.clone());
+                    return Some(self.value_map.get(entry_key).unwrap().value.clone());
                 }
             }
         }
-        return None;
+
+        None
     }
 
     pub fn insert(&mut self, key: K, value: V) {
@@ -103,10 +102,7 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                         *second_chance = true;
                     }
                 }
-                let new_map_entry = MapEntry {
-                    index: idx,
-                    value,
-                };
+                let new_map_entry = MapEntry { index: idx, value };
                 self.value_map.insert(key, new_map_entry);
             }
             // println!(
@@ -114,7 +110,6 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
             //     self.pointer,
             //     self.value_map.len()
             // );
-            return;
         } else {
             for i in self.pointer..self.pointer + self.capacity {
                 match &mut self.clock_list[i % self.capacity] {
@@ -124,10 +119,7 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                             key: key.clone(),
                         };
                         self.clock_list[i] = Some(new_entry);
-                        let new_map_entry = MapEntry {
-                            index: i,
-                            value,
-                        };
+                        let new_map_entry = MapEntry { index: i, value };
                         self.value_map.insert(key, new_map_entry);
                     }
                     Some(Entry { second_chance, .. }) => {
@@ -137,10 +129,7 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                         }
                         self.value_map
                             .remove(&self.clock_list[i % self.capacity].clone().unwrap().key);
-                        let new_map_entry = MapEntry {
-                            index: i,
-                            value,
-                        };
+                        let new_map_entry = MapEntry { index: i, value };
                         self.value_map.insert(key.clone(), new_map_entry);
                         self.clock_list[i % self.capacity] = Some(Entry {
                             second_chance: false,
@@ -190,9 +179,7 @@ mod tests {
         assert_eq!(clockmap2.miss, 11)
     }
     #[test]
-    fn test_multiple_thread() {
-
-    }
+    fn test_multiple_thread() {}
 }
 
 fn main() {}
