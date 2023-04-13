@@ -1,8 +1,11 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     thread,
 };
+
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 
 #[derive(Clone)]
 struct Entry<K: Clone> {
@@ -16,9 +19,7 @@ struct MapEntry<V> {
 }
 
 pub struct ClockDashMap<K: Clone, V> {
-    num_shards: usize,
     shards: Vec<Arc<Mutex<ClockMap<K, V>>>>,
-    key_shard: Arc<Mutex<HashMap<K, usize>>>,
     next_modify: Arc<Mutex<usize>>,
 }
 
@@ -31,7 +32,7 @@ pub struct ClockMap<K: Clone, V> {
 }
 
 impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockDashMap<K, V> {
-    fn new(cap: usize) -> Self {
+    pub fn new(cap: usize) -> Self {
         let num_shards = thread::available_parallelism().unwrap().get();
         let mut shards = Vec::default();
         for i in 0..num_shards {
@@ -42,41 +43,30 @@ impl<K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockDashMap<K, V> {
             shards.push(Arc::new(Mutex::new(ClockMap::new(this_cap))));
         }
         ClockDashMap {
-            num_shards: num_shards,
-            shards: shards,
-            key_shard: Arc::new(Mutex::new(HashMap::default())),
+            shards,
             next_modify: Arc::new(Mutex::new(0)),
         }
     }
-    fn insert(&mut self, key: K, val: V) {
-        let key_shard = self.key_shard.lock().unwrap();
-        if (*key_shard).contains_key(&key) {
-            let shard_idx = *key_shard.get(&key).unwrap();
-            let shard = &mut self.shards[shard_idx].lock().unwrap();
-            (*shard).insert(key.clone(), val);
-        } else {
-            let mut next_modify = self.next_modify.lock().unwrap();
-            let mut key_shard = self.key_shard.lock().unwrap();
-            let shard = &mut self.shards[*next_modify].lock().unwrap();
-            (*shard).insert(key.clone(), val);
-            *next_modify = (*next_modify + 1) % self.num_shards;
-            (*key_shard).insert(key, *next_modify);
 
-        }
+    #[inline(always)]
+    fn get_shard<'a>(&'a self, key: &K) -> MutexGuard<'a,ClockMap<K, V>> {
+        let mut hasher = DefaultHasher::new();
+        key.hash(&mut hasher);
+        let shard_idx = (hasher.finish() as usize) % self.shards.len();
+        self.shards[shard_idx].lock().unwrap()
     }
-    fn read(&mut self, key: &K) -> Option<V> {
-        let key_shard = self.key_shard.lock().unwrap();
-        if (*key_shard).contains_key(key) {
-            let shard_idx = *key_shard.get(key).unwrap();
-            let shard = &mut self.shards[shard_idx].lock().unwrap();
-            return (*shard).read(key);
-        }
-        return None;
+
+    pub fn insert(&mut self, key: K, val: V) {
+        self.get_shard(&key).insert(key, val);
+    }
+
+    pub fn read(&mut self, key: &K) -> Option<V> {
+        self.get_shard(&key).read(key)
     }
 }
 
 impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
-    fn new(cap: usize) -> Self {
+    pub fn new(cap: usize) -> Self {
         ClockMap {
             value_map: HashMap::default(),
             clock_list: vec![None; cap],
@@ -85,7 +75,8 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
             capacity: cap,
         }
     }
-    fn read(&mut self, key: &K) -> Option<V> {
+
+    pub fn read(&mut self, key: &K) -> Option<V> {
         if self.value_map.contains_key(key) {
             let idx = self.value_map.get(&key).unwrap().index;
             if let Some(Entry {
@@ -101,7 +92,8 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
         }
         return None;
     }
-    fn insert(&mut self, key: K, value: V) {
+
+    pub fn insert(&mut self, key: K, value: V) {
         if self.value_map.contains_key(&key) {
             let idx = self.value_map.get(&key).unwrap().index;
             if self.clock_list[idx].as_ref().unwrap().key == key {
@@ -113,7 +105,7 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                 }
                 let new_map_entry = MapEntry {
                     index: idx,
-                    value: value,
+                    value,
                 };
                 self.value_map.insert(key, new_map_entry);
             }
@@ -134,7 +126,7 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                         self.clock_list[i] = Some(new_entry);
                         let new_map_entry = MapEntry {
                             index: i,
-                            value: value,
+                            value,
                         };
                         self.value_map.insert(key, new_map_entry);
                     }
@@ -147,7 +139,7 @@ impl<'a, K: std::cmp::Eq + std::hash::Hash + Clone, V: Clone> ClockMap<K, V> {
                             .remove(&self.clock_list[i % self.capacity].clone().unwrap().key);
                         let new_map_entry = MapEntry {
                             index: i,
-                            value: value,
+                            value,
                         };
                         self.value_map.insert(key.clone(), new_map_entry);
                         self.clock_list[i % self.capacity] = Some(Entry {
